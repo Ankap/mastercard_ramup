@@ -2089,7 +2089,7 @@ body[data-view="home"] nav a[data-nav].on{background:transparent;color:#C2CCDD}
   setView(deep ? "doc" : "home");
   if (deep) setTimeout(function () { var t = document.querySelector(location.hash); if (t && t.scrollIntoView) t.scrollIntoView(); }, 40);
 
-  /* ---------------- cross-device sync (Vercel + Upstash) ---------------- */
+  /* ---------------- cross-device sync (Vercel + Supabase) ---------------- */
   (function () {
     var API = "/api/state";
     var me = uid();
