@@ -388,6 +388,13 @@ mark.hl:hover{filter:brightness(.96)}
 .np-tbb svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;
   stroke-linecap:round;stroke-linejoin:round}
 .np-tb-sep{width:1px;height:18px;background:var(--rule);margin:0 5px}
+.np-fs-input{width:34px;border:1px solid transparent;background:transparent;color:var(--ink);
+  font:inherit;font-size:11px;text-align:center;border-radius:4px;padding:2px 0;
+  appearance:textfield;-moz-appearance:textfield}
+.np-fs-input::-webkit-inner-spin-button,.np-fs-input::-webkit-outer-spin-button{
+  -webkit-appearance:none;margin:0}
+.np-fs-input:hover{border-color:var(--rule)}
+.np-fs-input:focus{outline:2px solid var(--gold);outline-offset:0;border-color:transparent;background:var(--paper)}
 .np-b{flex:1;min-height:0;display:flex;padding:14px 18px 18px}
 .np-t{flex:1;min-height:0;width:100%;outline:0;font:inherit;font-size:15px;line-height:1.65;
   color:var(--ink);background:transparent;overflow-y:auto;overscroll-behavior:contain}
@@ -398,6 +405,11 @@ mark.hl:hover{filter:brightness(.96)}
 .np-t ul{list-style:disc;margin:6px 0;padding-left:26px}
 .np-t ol{margin:6px 0;padding-left:26px}
 .np-t li{margin:3px 0}
+.np-t ul.np-todo{list-style:none;padding-left:2px}
+.np-t ul.np-todo li{display:flex;align-items:flex-start;gap:8px}
+.np-t ul.np-todo li input[type="checkbox"]{margin:4px 0 0;flex:none;width:15px;height:15px;
+  accent-color:var(--ink);cursor:pointer}
+.np-t ul.np-todo li.np-done{color:var(--mute);text-decoration:line-through}
 
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(12px);background:var(--ink);
   color:#fff;padding:9px 16px;border-radius:7px;font-size:13.5px;z-index:90;opacity:0;
@@ -604,6 +616,13 @@ body[data-view="home"] nav a[data-nav].on{background:transparent;color:#C2CCDD}
     <button class="np-tbb" id="np-list" type="button" title="Bullet list" aria-label="Bullet list">
       <svg viewBox="0 0 24 24"><circle cx="4" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.3" fill="currentColor" stroke="none"/><path d="M9 6h11M9 12h11M9 18h11"/></svg>
     </button>
+    <button class="np-tbb" id="np-check" type="button" title="Checklist / to-do" aria-label="Checklist">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 12l3 3 7-7"/></svg>
+    </button>
+    <span class="np-tb-sep"></span>
+    <button class="np-tbb" id="np-fs-dec" type="button" title="Decrease text size" aria-label="Decrease text size">&#8722;</button>
+    <input type="number" class="np-fs-input" id="np-fs-input" value="15" min="8" max="60" step="1" aria-label="Text size in pixels" title="Type an exact text size (applies to the selection, or text typed next)">
+    <button class="np-tbb" id="np-fs-inc" type="button" title="Increase text size" aria-label="Increase text size">&#43;</button>
   </div>
   <div class="np-b"><div class="np-t" id="np-t" contenteditable="true" data-placeholder="Start typing…" spellcheck="true"></div></div>
 </aside>
@@ -1248,7 +1267,7 @@ body[data-view="home"] nav a[data-nav].on{background:transparent;color:#C2CCDD}
 
   // Allowlist-sanitize the notes-pad HTML. It round-trips through an unauthenticated
   // shared endpoint (any device can push a payload), so never trust it verbatim.
-  var NP_ALLOWED = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, UL: 1, OL: 1, LI: 1, BR: 1, DIV: 1, P: 1, SPAN: 1 };
+  var NP_ALLOWED = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, UL: 1, OL: 1, LI: 1, BR: 1, DIV: 1, P: 1, SPAN: 1, INPUT: 1 };
   function sanitizeNote(html) {
     var doc = new DOMParser().parseFromString(String(html || ""), "text/html");
     (function clean(node) {
@@ -1261,7 +1280,26 @@ body[data-view="home"] nav a[data-nav].on{background:transparent;color:#C2CCDD}
             clean(node);
             return;
           }
+          if (n.tagName === "INPUT") {
+            // only a plain checkbox marker is allowed through; anything else (text
+            // inputs, event-handler attributes, etc.) is dropped, not sanitized-in-place
+            if (n.getAttribute("type") !== "checkbox") { node.removeChild(n); return; }
+            var wasChecked = n.hasAttribute("checked");
+            [].slice.call(n.attributes).forEach(function (a) { n.removeAttribute(a.name); });
+            n.setAttribute("type", "checkbox");
+            n.setAttribute("contenteditable", "false");
+            if (wasChecked) n.setAttribute("checked", "");
+            return;
+          }
+          var keepClass = (n.tagName === "UL" && n.getAttribute("class") === "np-todo") ||
+            (n.tagName === "LI" && n.getAttribute("class") === "np-done") ? n.getAttribute("class") : null;
+          // a per-run font-size (px only, strictly validated) is the one style declaration allowed through
+          var styleVal = n.getAttribute("style");
+          var fsMatch = n.tagName === "SPAN" && styleVal ? styleVal.trim().match(/^font-size:\s*(\d{1,3})px;?\s*$/) : null;
+          var keepStyle = fsMatch ? "font-size: " + fsMatch[1] + "px" : null;
           [].slice.call(n.attributes).forEach(function (a) { n.removeAttribute(a.name); });
+          if (keepClass) n.setAttribute("class", keepClass);
+          if (keepStyle) n.setAttribute("style", keepStyle);
           clean(n);
         } else if (n.nodeType !== 3) {
           node.removeChild(n);
@@ -2146,6 +2184,159 @@ body[data-view="home"] nav a[data-nav].on{background:transparent;color:#C2CCDD}
     if (k === "b") { ev.preventDefault(); npCmd("bold"); }
     else if (k === "i") { ev.preventDefault(); npCmd("italic"); }
     else if (k === "u") { ev.preventDefault(); npCmd("underline"); }
+  });
+
+  /* text size — applies to the selection (or, with the caret collapsed, to text typed
+     next), like OneNote/Word, not a zoom of the whole pad */
+  function npFsClamp(v) { return Math.max(8, Math.min(60, Math.round(v))); }
+  function npCurrentFontSizePx() {
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return 15;
+    var node = sel.getRangeAt(0).startContainer;
+    var el = node.nodeType === 3 ? node.parentElement : node;
+    if (!el || !$("#np-t").contains(el)) return 15;
+    return npFsClamp(parseFloat(getComputedStyle(el).fontSize) || 15);
+  }
+  // Clicking into the size input blurs #np-t, and focusing a contenteditable back
+  // does not reliably restore its previous selection — so the range is captured on
+  // every change and explicitly re-applied before acting on it.
+  var npSavedRange = null;
+  // If the selection is exactly the full contents of one existing size span, resizing
+  // again should adjust that span in place rather than nest a new one inside it. Compared
+  // by text content rather than Range boundary points, which proved too fragile across a
+  // focus round-trip through the size input (node/offset identity isn't always preserved).
+  function npEnclosingSizeSpan(range) {
+    var startEl = range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
+    var span = startEl && startEl.closest ? startEl.closest('span[style^="font-size"]') : null;
+    if (!span || !$("#np-t").contains(span)) return null;
+    var endEl = range.endContainer.nodeType === 3 ? range.endContainer.parentElement : range.endContainer;
+    var endSpan = endEl && endEl.closest ? endEl.closest('span[style^="font-size"]') : null;
+    if (endSpan !== span) return null;
+    if (range.toString() !== span.textContent) return null;
+    return span;
+  }
+  function npApplyFontSize(px) {
+    px = npFsClamp(px);
+    var ta = $("#np-t");
+    ta.focus();
+    var sel = window.getSelection();
+    if (npSavedRange) { sel.removeAllRanges(); sel.addRange(npSavedRange); }
+    if (!sel.rangeCount) return;
+    var range = sel.getRangeAt(0);
+    if (range.collapsed) {
+      // nothing selected: anchor the caret inside a span carrying the new size, so
+      // whatever gets typed next inherits it (a zero-width space gives the span
+      // real content to hold a caret in)
+      var span = document.createElement("span");
+      span.style.fontSize = px + "px";
+      span.appendChild(document.createTextNode("​"));
+      range.insertNode(span);
+      var caret = document.createRange();
+      caret.setStart(span.firstChild, 1);
+      caret.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(caret);
+    } else {
+      var existing = npEnclosingSizeSpan(range);
+      var target;
+      if (existing) {
+        existing.style.fontSize = px + "px";
+        target = existing;
+      } else {
+        // wrap the selected content directly via the Range API instead of the legacy
+        // execCommand('fontSize') + <font> tag swap, which left the selection anchored
+        // outside the new span after the DOM was mutated, silently breaking a second
+        // resize (of the same or already-resized text) right after the first
+        var wrap = document.createElement("span");
+        wrap.style.fontSize = px + "px";
+        wrap.appendChild(range.extractContents());
+        range.insertNode(wrap);
+        target = wrap;
+      }
+      var picked = document.createRange();
+      picked.selectNodeContents(target);
+      sel.removeAllRanges();
+      sel.addRange(picked);
+    }
+    npSavedRange = sel.getRangeAt(0).cloneRange();
+    $("#np-fs-input").value = px;
+    npQueueSave();
+  }
+  document.addEventListener("selectionchange", function () {
+    var ta = $("#np-t");
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    var r = sel.getRangeAt(0);
+    var el = r.startContainer.nodeType === 3 ? r.startContainer.parentElement : r.startContainer;
+    if (!el || !ta.contains(el)) return;
+    npSavedRange = r.cloneRange();
+    $("#np-fs-input").value = npCurrentFontSizePx();
+  });
+  $("#np-fs-dec").addEventListener("click", function () { npApplyFontSize(npCurrentFontSizePx() - 1); });
+  $("#np-fs-inc").addEventListener("click", function () { npApplyFontSize(npCurrentFontSizePx() + 1); });
+  $("#np-fs-input").addEventListener("change", function () {
+    var v = parseInt(this.value, 10);
+    npApplyFontSize(isNaN(v) ? 15 : v);
+  });
+  $("#np-fs-input").addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); this.blur(); } });
+
+  /* checklist / to-do items */
+  function npNewCheckbox() {
+    var cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.setAttribute("contenteditable", "false");
+    return cb;
+  }
+  function npLiOf(node) {
+    var el = node && node.nodeType === 3 ? node.parentElement : node;
+    return el && el.closest ? el.closest("li") : null;
+  }
+  $("#np-check").addEventListener("click", function () {
+    var ta = $("#np-t");
+    ta.focus();
+    var sel = window.getSelection();
+    var li = sel.rangeCount ? npLiOf(sel.getRangeAt(0).startContainer) : null;
+    var existingUl = li && li.closest ? li.closest("ul.np-todo") : null;
+    if (existingUl) {
+      $$("input[type=checkbox]", existingUl).forEach(function (cb) { cb.remove(); });
+      existingUl.classList.remove("np-todo");
+      document.execCommand("insertUnorderedList", false, null);
+    } else {
+      document.execCommand("insertUnorderedList", false, null);
+      var sel2 = window.getSelection();
+      var newLi = sel2.rangeCount ? npLiOf(sel2.getRangeAt(0).startContainer) : null;
+      var ul = newLi && newLi.closest ? newLi.closest("ul") : null;
+      if (ul) {
+        ul.classList.add("np-todo");
+        $$("li", ul).forEach(function (item) {
+          if (!item.querySelector(':scope > input[type="checkbox"]')) item.insertBefore(npNewCheckbox(), item.firstChild);
+        });
+      }
+    }
+    npQueueSave();
+  });
+  $("#np-t").addEventListener("click", function (ev) {
+    var cb = ev.target.closest && ev.target.closest('input[type="checkbox"]');
+    if (!cb) return;
+    var li = cb.closest("li");
+    if (li) li.classList.toggle("np-done", cb.checked);
+    // innerHTML serialization (used for saving) reflects the checked ATTRIBUTE, which a
+    // user click does not update on its own — only the live checked PROPERTY. Sync it.
+    if (cb.checked) cb.setAttribute("checked", ""); else cb.removeAttribute("checked");
+    npQueueSave();
+  });
+  $("#np-t").addEventListener("keydown", function (ev) {
+    if (ev.key !== "Enter") return;
+    var sel = window.getSelection();
+    var li = sel.rangeCount ? npLiOf(sel.getRangeAt(0).startContainer) : null;
+    if (!li || !li.closest("ul.np-todo")) return;
+    setTimeout(function () {
+      var sel2 = window.getSelection();
+      var newLi = sel2.rangeCount ? npLiOf(sel2.getRangeAt(0).startContainer) : null;
+      if (newLi && newLi.closest("ul.np-todo") && !newLi.querySelector(':scope > input[type="checkbox"]')) {
+        newLi.insertBefore(npNewCheckbox(), newLi.firstChild);
+      }
+    }, 0);
   });
 
   /* ---------------- progress ---------------- */
