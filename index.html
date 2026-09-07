@@ -2068,14 +2068,17 @@ body[data-view="home"] nav a[data-nav].on{background:transparent;color:#C2CCDD}
     var it = ev.target.closest("[data-go]");
     if (!it) return;
     var id = it.getAttribute("data-go"), kind = it.getAttribute("data-kind");
-    var el = kind === "hl" ? $('mark[data-hl="' + id + '"]') : document.getElementById(id);
-    if (!el) { toast("Could not find that spot"); return; }
     closeDrawer();
-    if (el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "center" });
-    el.style.transition = "outline .2s";
-    el.style.outline = "2px solid var(--gold)";
-    el.style.outlineOffset = "3px";
-    setTimeout(function () { el.style.outline = ""; }, 1600);
+    setView("doc");
+    setTimeout(function () {
+      var el = kind === "hl" ? $('mark[data-hl="' + id + '"]') : document.getElementById(id);
+      if (!el) { toast("Could not find that spot"); return; }
+      if (el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.style.transition = "outline .2s";
+      el.style.outline = "2px solid var(--gold)";
+      el.style.outlineOffset = "3px";
+      setTimeout(function () { el.style.outline = ""; }, 1600);
+    }, 30);
   });
   function openDrawer() { closeNotes(); renderDrawer(); $("#drawer").classList.add("on"); }
   function closeDrawer() { $("#drawer").classList.remove("on"); }
